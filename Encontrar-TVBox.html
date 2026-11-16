@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Encontrar TV Box</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; background: #101218; color: #e6e8ee; font-family: system-ui, sans-serif; }
+  main { max-width: 560px; margin: 0 auto; padding: 40px 16px; }
+  h1 { font-size: 26px; margin: 0 0 8px; }
+  p { color: #a9afbd; line-height: 1.5; }
+  button { background: #2b6cff; color: #fff; border: 0; border-radius: 8px; padding: 12px 20px; font-size: 16px; cursor: pointer; }
+  button:disabled { opacity: .5; cursor: default; }
+  #bar { height: 6px; background: #252a36; border-radius: 3px; margin: 20px 0 8px; overflow: hidden; }
+  #fill { height: 100%; width: 0; background: #2b6cff; transition: width .2s; }
+  #st { font-size: 14px; color: #a9afbd; min-height: 20px; }
+  ul { list-style: none; padding: 0; }
+  li a { display: block; margin: 10px 0; padding: 14px 16px; background: #1c2130; border-radius: 8px; color: #8fb2ff; font-size: 18px; text-decoration: none; }
+  li a:hover { background: #242b3e; }
+  .manual { margin-top: 32px; display: flex; gap: 8px; }
+  input { flex: 1; min-width: 0; background: #1c2130; color: #e6e8ee; border: 1px solid #333a4d; border-radius: 8px; padding: 10px 12px; font-size: 16px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Encontrar a TV Box</h1>
+  <p>Ligue a TV Box, espere uns 30 segundos e clique em procurar. O notebook precisa estar na mesma rede (mesmo roteador) que a TV Box.</p>
+  <button id="go">Procurar TV Box</button>
+  <div id="bar"><div id="fill"></div></div>
+  <div id="st"></div>
+  <ul id="found"></ul>
+
+  <div class="manual">
+    <input id="ip" placeholder="Ou digite o IP, ex.: 192.168.0.25">
+    <button id="open">Abrir</button>
+  </div>
+</main>
+<script>
+  const PORT = 8080;
+  const REDES = ['192.168.0', '192.168.1', '192.168.2', '192.168.15', '192.168.100', '10.0.0'];
+  const found = document.getElementById('found');
+  const st = document.getElementById('st');
+  const fill = document.getElementById('fill');
+  const go = document.getElementById('go');
+
+  function testar(ip) {
+    return new Promise(resolve => {
+      const img = new Image();
+      const t = setTimeout(() => { img.src = ''; resolve(false); }, 1500);
+      img.onload = () => { clearTimeout(t); resolve(true); };
+      img.onerror = () => { clearTimeout(t); resolve(false); };
+      img.src = `http://${ip}:${PORT}/ping.png?t=${Date.now()}`;
+    });
+  }
+
+  function mostrar(ip) {
+    const li = document.createElement('li');
+    li.innerHTML = `<a href="http://${ip}:${PORT}/">TV Box encontrada: ${ip} &rarr; assistir</a>`;
+    found.appendChild(li);
+    try { localStorage.setItem('ultimoIp', ip); } catch (e) {}
+  }
+
+  go.onclick = async () => {
+    go.disabled = true;
+    found.innerHTML = '';
+    const ips = [];
+    let ultimo = null;
+    try { ultimo = localStorage.getItem('ultimoIp'); } catch (e) {}
+    if (ultimo) ips.push(ultimo);
+    for (const r of REDES) for (let i = 1; i < 255; i++) ips.push(`${r}.${i}`);
+
+    let feitos = 0, achou = 0;
+    const vistos = new Set();
+    const LOTE = 60;
+    for (let i = 0; i < ips.length; i += LOTE) {
+      const lote = ips.slice(i, i + LOTE);
+      const res = await Promise.all(lote.map(testar));
+      res.forEach((ok, k) => {
+        if (ok && !vistos.has(lote[k])) { vistos.add(lote[k]); mostrar(lote[k]); achou++; }
+      });
+      feitos += lote.length;
+      fill.style.width = (100 * feitos / ips.length) + '%';
+      st.textContent = `Procurando... ${feitos} de ${ips.length} endereços`;
+    }
+    st.textContent = achou
+      ? 'Pronto! Clique no endereço acima.'
+      : 'Não achei. Confira se a TV Box está ligada há pelo menos 30 s e na mesma rede, ou procure o IP na página do roteador.';
+    go.disabled = false;
+  };
+
+  document.getElementById('open').onclick = () => {
+    const ip = document.getElementById('ip').value.trim();
+    if (ip) location.href = `http://${ip}:${PORT}/`;
+  };
+</script>
+</body>
+</html>
